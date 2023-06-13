@@ -13,6 +13,8 @@
 #define led2 20  
 #define btn0 19
 #define btn1 18
+#define dswt1 16
+#define dswt2 17
 
 #define DHT11_PIN 2 //gpio
 #define FAN_PIN  0  //gpio
@@ -48,7 +50,7 @@ struct pot_values{
 struct sensor_values{
   long t=millis();
   int soil=0;
-  float light, temp, rh;
+  float light=30000, temp=0, rh=0;
 }sens_val;
 
 struct dev_status{
@@ -56,6 +58,16 @@ struct dev_status{
   long t=millis();
 }dstat;
 
+struct auto_status{
+  bool devs=0, lights=0;
+}astat;
+
+struct threshold_values{
+  //long t=millis();
+  const int soil=490;
+  const float rh=80.0;
+  const float light=30000;
+}th_val;
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
@@ -91,9 +103,10 @@ void setup() {
 
 void loop() {
   digitalWrite(ledb,LOW);  // LED ON
+  update_auto_status();
   update_input();
   update_output_channel();
-  if(millis()-sens_val.t >1000){
+  if(millis()-sens_val.t >1200){
   update_sensors();
   sens_val.t=millis();
   }
@@ -104,19 +117,50 @@ void loop() {
 }
 
 void update_input(){
-  pot_val.red=analogRead(red_pot);
-  pot_val.blue=analogRead(blue_pot);
-  pot_val.white=analogRead(white_pot);
-  if(!digitalRead(btn0)){
-    if(millis()-dstat.t>300)
-      dstat.pump^=1;
-    dstat.t=millis();
-  }
-  if(!digitalRead(btn1)){
-    if(millis()-dstat.t>300)
-      dstat.fan^=1;
+  if(!astat.lights){
+    pot_val.red=analogRead(red_pot);
+    pot_val.blue=analogRead(blue_pot);
+    pot_val.white=analogRead(white_pot);
+  }else
+    update_light_auto();
+    
+  if(!astat.devs){
+    if(!digitalRead(btn0)){
+      if(millis()-dstat.t>300)
+        dstat.pump^=1;
       dstat.t=millis();
-  }
+    }
+    if(!digitalRead(btn1)){
+      if(millis()-dstat.t>300)
+        dstat.fan^=1;
+        dstat.t=millis();
+    }
+  }else
+    update_dev_auto();
+}
+
+void update_auto_status(){
+    astat.devs=!digitalRead(dswt1);
+    astat.lights=!digitalRead(dswt2);
+}
+
+void update_dev_auto(){
+  if(sens_val.rh>th_val.rh)
+    dstat.fan=1;
+  else
+    dstat.fan=0;
+
+  if(sens_val.soil>th_val.soil)
+    dstat.pump=1;
+  else
+    dstat.pump=0;
+}
+
+void update_light_auto(){
+  int output_level=map(sens_val.light, th_val.light, 0, 0,1650);
+  pot_val.red=output_level;
+  pot_val.blue=output_level;
+  pot_val.white=output_level;
 }
 
 void update_sensors(){
@@ -129,9 +173,9 @@ void update_sensors(){
 }
 
 void update_output_channel(){
-  analogWrite(red_ch, map(pot_val.red,3,1650,0,800000));
-  analogWrite(blue_ch, map(pot_val.blue,3,1650,0,800000));
-  analogWrite(white_ch, map(pot_val.white,3,1650,0,800000));
+  analogWrite(red_ch, map(pot_val.red,0,1650,0,800000));
+  analogWrite(blue_ch, map(pot_val.blue,0,1650,0,800000));
+  analogWrite(white_ch, map(pot_val.white,0,1650,0,800000));
   digitalWrite(FAN_PIN,dstat.fan);
   digitalWrite(PUMP_PIN,dstat.pump);
 }
@@ -190,15 +234,20 @@ void update_display(){
 
   display.fillRect(109, 0, 18, 11, SSD1306_BLACK);
   display.fillRect(109, 21, 18, 11, SSD1306_BLACK);
-  display.setCursor(115, 2); display.write('F');
-  display.drawRect(109, 0, 18, 11, SSD1306_WHITE);
-  display.setCursor(115, 23); display.write('P');
-  display.drawRect(109, 21, 18, 11, SSD1306_WHITE);
+  display.setCursor(115, 0); display.write('F');
+  display.drawRect(109, -1, 18, 11, SSD1306_WHITE);
+  display.setCursor(115, 25); display.write('P');
+  display.drawRect(109, 23, 18, 11, SSD1306_WHITE);
   if(dstat.fan)
-    display.fillRect(109, 0, 18, 11, SSD1306_INVERSE);
+    display.fillRect(109, -1, 18, 11, SSD1306_INVERSE);
   if(dstat.pump)
-    display.fillRect(109, 21, 18, 11, SSD1306_INVERSE);
-    
+    display.fillRect(109, 23, 18, 11, SSD1306_INVERSE);
+  if(astat.devs){
+    display.setCursor(113, 12); display.write('D');
+  }
+  if(astat.lights){
+    display.setCursor(120, 12); display.write('L');
+  }
   display.display();
 }
 void serial_display(){
