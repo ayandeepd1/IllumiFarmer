@@ -165,11 +165,23 @@ void update_light_auto(){
 
 void update_sensors(){
   sens_val.soil = analogRead(SOIL_PIN);
-  if (lightMeter.measurementReady())
+  
+  if(millis()-sens_val.t >1000){
+    long t1=millis();
+    while (!lightMeter.measurementReady(true)){
+      Serial.println(millis()-t1);
+      if(millis()-t1 >2)
+        break;
+    };
     sens_val.light = lightMeter.readLightLevel();
-  DHT.read(DHT11_PIN, 22);
-  sens_val.rh = DHT.humidity_f;
-  sens_val.temp = DHT.temperature_f;
+    //Serial.println(millis()-t1);
+  
+    DHT.read(DHT11_PIN, 22);
+    sens_val.rh = DHT.humidity_f;
+    sens_val.temp = DHT.temperature_f;
+    
+    sens_val.t=millis();
+  }
 }
 
 void update_output_channel(){
